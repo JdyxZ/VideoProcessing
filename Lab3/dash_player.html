@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>MPEG-DASH</title>
+		<!-- DASH reference implementation -->
+		<script src="http://cdn.dashjs.org/latest/dash.all.min.js"></script>
+
+		<body onload="init()">
+			<h1>Chainsaw Man Episode 11</h1>
+			<video data-dashjs-player id="html5video" width="80%" height="80%" controls autoplay></video>
+		
+			<script>
+				function init() 
+				{
+
+					var video, player, url = "dash/master.mpd";
+
+					video = document.querySelector("video");
+					player = dashjs.MediaPlayer().create();
+					player.updateSettings(
+					{ 
+						'streaming': 
+						{
+			                'abr': 
+			                {
+			                	'autoSwitchBitrate': 
+			                	{ 
+			                		'audio': false, 
+			                		'video': true 
+			                	},
+			                    'useDefaultABRRules': true,
+			                    'ABRStrategy': 'abrThroughput',
+			                    'additionalAbrRules': 
+			                    {
+			                        'insufficientBufferRule': true,
+			                        'switchHistoryRule': false,
+			                        'droppedFramesRule': false,
+			                        'abandonRequestsRule': false
+			                    }
+	                
+	            			},
+	            			'buffer': 
+	            			{
+	                    		'fastSwitchEnabled': true
+	               			 }
+	        			}
+					});
+
+					player.initialize(video, url, true);
+
+				}
+
+				function check() 
+				{
+					if (location.protocol === 'http:' && location.hostname !== 'localhost') 
+					{
+					var out = 'This page has been loaded under http. This might result in the EME APIs not being available to the player and any DRM-protected content will fail to play. ' + 'If you wish to test manifest URLs that require EME support, then <a href=\'https:' + window.location.href.substring(window.location.protocol.length) + '\'>reload this page under https</a>.'
+					var div = document.getElementById('http-warning');
+					
+					div.innerHTML = out;
+					div.style.display = ''
+					}
+				}
+			</script>
+			<script>
+
+				var expectedEncryptedEvents = 2
+				var config = [{
+				    initDataTypes: ['cenc'],
+				    videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.4D4028"' }],
+				    audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }]
+				}];
+
+				var html5video = document.getElementById("html5video");
+
+				navigator.requestMediaKeySystemAccess('org.w3.clearkey', config
+				).then(
+				    function (keySystemAccess) {
+				        var promise = keySystemAccess.createMediaKeys();
+				        promise.catch(
+				            function (error) {
+				                console.error("Unable to create MediaKeys : " +
+				                    error);
+				            }
+				        );
+				        promise.then(
+				            function (createdMediaKeys) {
+				                return html5video.setMediaKeys(createdMediaKeys);
+				            }
+				        ).then(
+				            function (mediaKeys) {
+				                console.warn("Successfully set MediaKeys on video object");
+				                playMedia();
+				            }
+				        ).catch(
+				            function (error) {
+				                console.error("Unable to set MediaKeys on " +
+				                    "video object : " + error);
+				            }
+				        );
+				    }
+				).catch(
+				    function (error) {
+				        console.error("Error while" +
+				            "initializing media key system : " + error);
+				    }
+				);
+
+
+				function playMedia() {
+				    html5video.addEventListener('playing', onPlaying, false)
+				    try {
+				        html5video.addEventListener("encrypted", handleEncrypted, false);
+				    } catch (err) {
+				        console.error("Error while adding an event listener for 'encrypted' event on video element. Error: " +
+				            err.message);
+				    }
+				    html5video.play()
+				}
+
+
+				function handleEncrypted(e) {
+				    if (--expectedEncryptedEvents === 0) {
+				        html5video.removeEventListener("encrypted", handleEncrypted, false);
+				    }
+				    console.warn('Media is Encrypted : ' + e)
+
+				    // get the mediaKeys from html5video
+				    var mediaKeys = html5video.mediaKeys;
+
+				    //fail the test if the mediaKeys are not set on html5video
+				    if (mediaKeys === null || mediaKeys === undefined) {
+				        console.error("MediaKeys set on html5video is " + mediaKeys);
+				    }
+
+				    // create and initialize session
+				    var keySession = mediaKeys.createSession();
+				    try {
+				        keySession.addEventListener("message", handleMessage, false);
+				    } catch (err) {
+				        console.error("Unable to add 'message' " +
+				            "event listener to the keySession object. Error: " + err.message);
+				    }
+				    var promise = keySession.generateRequest(event.initDataType, event.initData)
+				    promise.catch(
+				        function (error) {
+				            console.error("Unable to create or " +
+				                "initialize key session. Error : " + error);
+				        }
+				    );
+				}
+
+
+				function handleMessage(event) {
+				    console.info(event)
+				    var keySession = event.target;
+				    console.warn('MediaKeySession : ' + event.target);
+				    var te = new TextEncoder();
+				    var license = te.encode('{"keys":[{"kty":"oct","k":"fR3RrL7nCyGXtebTDgkXLw,"kid":"5MXZrEI4kEThqccZtJUKZQ"}],"type":"temporary"}');
+				    keySession.update(license).catch(
+				        function (error) {
+				            console.error('Failed to update the session', error);
+				        }
+				    );
+				}
+
+
+				function onPlaying() {
+				    console.warn('Media started playing')
+				}
+
+			</script>
+		</body>
+	</head>
+</html>
